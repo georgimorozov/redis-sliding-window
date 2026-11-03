@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- README: why a sliding window, install by git tag for both languages, Express, Hono, Astro and Laravel examples, the failure policy, connection advice, per-call cost and limits.
 - The PHP package: `SlidingWindowLimiter` for Predis 3 and phpredis 6.3+ (the same script, `SCRIPT LOAD`/`EVALSHA` with the `EVAL` fallback, and the same validation, failure policy and `onError` callback as the TypeScript package), `Result` with `retryAfterSeconds()`, `UnavailableReport` and `ErrorContext`.
 - The Laravel integration: an auto-discovered service provider, a `Limiters` registry configured in `config/redis-sliding-window.php`, and the `sliding-window:<name>` route middleware (429 with `Retry-After`). Usage: `docs/php.md`.
 - PHP tests: unit tests (both clients, the Laravel integration through Orchestra Testbench), the shared vectors and integration tests (including a 40-way concurrent burst from separate processes and phpredis reconnect failures) against Valkey 9.1, Valkey 7.2 and Redis 7.2, and Composer consumer smoke scenarios.
