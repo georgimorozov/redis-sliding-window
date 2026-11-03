@@ -47,7 +47,7 @@ the request in integer microseconds. One script run per call does this atomicall
 2. Remove members scored at or below `now - windowMs * 1000`.
 3. If the nonce is still a member, the call is a resend of an allowed call whose entry remains: allowed, nothing
    changes.
-4. Count the members. Below `limit`: add the nonce with score `now`, `PEXPIRE` the key `windowMs`, allow.
+4. Count the members. Below `limit`: add the nonce with score `now`, `PEXPIREAT` the key at `ceil(now / 1000) + windowMs` ms, allow.
    Otherwise deny and change nothing.
 
 Guarantees (the tests pin each):
@@ -85,7 +85,7 @@ The packages validate inputs; the script trusts them.
   sorted-set score. Numbers passed to commands are exact integer decimal strings, never Lua's default formatting
   (it rounds). Reading `TIME` before writing is safe because Redis 7.0+ and Valkey replicate a script's effects,
   not the script; hence the Redis 7.2 floor.
-- Data: member = nonce, score = `now`. `PEXPIRE key windowMs` only when an entry is added. The replay check is
+- Data: member = nonce, score = `now`. `PEXPIREAT key ceil(now / 1000) + windowMs` (milliseconds, absolute, rounded up so the key never expires before its newest entry's microsecond window ends) only when an entry is added. The replay check is
   `ZSCORE key nonce` (absent: nil, seen by Lua as `false`).
 - Return: `{allowed, remaining, retryAfterMs, resetAfterMs}`, four integers.
 
@@ -263,7 +263,7 @@ await the client's `ready` event before `load()`).
   `command.args`). Handle them like any other client error.
 - A callback that throws, or (TypeScript) returns a promise that rejects, never changes the result. TypeScript
   attaches a rejection handler without awaiting and emits a process warning, code `RSW_ON_ERROR_FAILED`, as a string
-  with the callback error's message. PHP writes `redis-sliding-window: onError callback failed: <class>: <message>`
+  with the callback error's message (`(unreadable error)` when reading it throws). PHP writes `redis-sliding-window: onError callback failed: <class>: <message>`
   with `error_log()`.
 - Not throttled: during an outage it runs on every call. Throttle inside it (for example one report a minute per
   limiter name).

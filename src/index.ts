@@ -262,7 +262,12 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 }
 
 function warnCallbackFailed(error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error);
+  let message: string;
+  try {
+    message = error instanceof Error ? String(error.message) : String(error);
+  } catch {
+    message = '(unreadable error)';
+  }
   process.emitWarning(`redis-sliding-window: onError callback failed: ${message}`, {
     code: WARNING_CODE,
   });

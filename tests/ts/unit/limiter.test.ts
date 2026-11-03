@@ -416,6 +416,49 @@ describe('the onError callback', () => {
     }
   });
 
+  it('a callback failure whose message cannot be read still yields the degraded result', async () => {
+    const warn = vi.spyOn(process, 'emitWarning').mockImplementation(() => undefined);
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    const hostile = {
+      toString() {
+        throw new Error('hostile');
+      },
+    };
+    const hostileError = new Error('x');
+    Object.defineProperty(hostileError, 'message', {
+      get() {
+        throw new Error('hostile');
+      },
+    });
+    try {
+      const sync = limiter(
+        {
+          failMode: 'open',
+          onError: () => {
+            throw hostile;
+          },
+        },
+        failing,
+      ).limiter;
+      expect(await sync.hit('x')).toMatchObject({ allowed: true, degraded: true });
+      const async = limiter(
+        { failMode: 'closed', onError: async () => Promise.reject(hostileError) },
+        failing,
+      ).limiter;
+      expect(await async.hit('x')).toMatchObject({ allowed: false, degraded: true });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(warn).toHaveBeenCalledWith(
+        'redis-sliding-window: onError callback failed: (unreadable error)',
+        { code: 'RSW_ON_ERROR_FAILED' },
+      );
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
   it('does not await the callback', async () => {
     let release: () => void = () => undefined;
     const pending = new Promise<void>((resolve) => {

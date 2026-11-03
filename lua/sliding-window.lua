@@ -39,7 +39,8 @@ end
 
 if count < limit then
   redis.call('ZADD', key, int(now), nonce)
-  redis.call('PEXPIRE', key, ARGV[2])
+  -- Absolute, rounded up: the key outlives the entry's microsecond window (a relative PEXPIRE need not).
+  redis.call('PEXPIREAT', key, int(math.ceil(now / 1000) + window_ms))
   return {1, limit - count - 1, 0, window_ms}
 end
 

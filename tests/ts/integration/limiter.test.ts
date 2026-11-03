@@ -78,6 +78,19 @@ describe(`the limiter against ${host}:${port}`, () => {
     expect(await admin.zrange(key, '0', '-1')).toEqual(['one-ms-younger']);
   });
 
+  it('the key expires no earlier than its newest entry ages out, at microsecond precision', async () => {
+    // A 1 ms window with the entry scored late in its millisecond: a relative millisecond expiry from the
+    // command's own clock could end before the entry's window does.
+    const key = `rsw-itest:pexpireat-${hex(4)}:1:x`;
+    const seconds = 1_800_000_000; // a fixed server time in the future, so the key is not already expired
+    const reply = await runScript(FIXED_CLOCK_SCRIPT, key, 1, 1, hex(16), seconds, 999_999);
+    expect(reply).toEqual([1, 0, 0, 1]);
+    const scoreUs = seconds * 1_000_000 + 999_999;
+    const expiresAtMs = Number(await admin.call('PEXPIRETIME', key));
+    expect(expiresAtMs * 1000).toBeGreaterThanOrEqual(scoreUs + 1000);
+    expect(expiresAtMs).toBe(Math.ceil(scoreUs / 1000) + 1);
+  });
+
   it('a denied call leaves the TTL unchanged', async () => {
     const name = `ttl-${hex(4)}`;
     const l = limiter({ name, limit: 1 });
@@ -96,7 +109,7 @@ describe(`the limiter against ${host}:${port}`, () => {
     await l.hit('x');
     const key = keyOf(name, 300, 'x');
     expect(await admin.pttl(key)).toBeGreaterThan(0);
-    expect(await admin.pttl(key)).toBeLessThanOrEqual(300);
+    expect(await admin.pttl(key)).toBeLessThanOrEqual(301); // rounded up to the next millisecond
     await sleep(400);
     expect(await admin.exists(key)).toBe(0);
   });
