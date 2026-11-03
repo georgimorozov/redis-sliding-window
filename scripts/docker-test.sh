@@ -138,7 +138,13 @@ cmd_format() {
   local files file
   build_image node "$MAIN_NODE"
   containers="$containers $prefix-format-list"
-  files="$(docker run --rm --name "$prefix-format-list" "$IMAGE_TAG" npx prettier --list-different . || true)"
+  # --list-different exits 1 when files differ (expected here); any other failure stops the helper.
+  local status=0
+  files="$(docker run --rm --name "$prefix-format-list" "$IMAGE_TAG" npx prettier --list-different .)" || status=$?
+  if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+    echo "docker-test: prettier --list-different failed (exit $status)" >&2
+    exit "$status"
+  fi
   for file in $files; do
     count=$((count + 1))
     tmpfile="$file.rsw-tmp"

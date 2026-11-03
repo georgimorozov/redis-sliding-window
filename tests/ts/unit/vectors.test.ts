@@ -111,6 +111,54 @@ describe('tests/vectors', () => {
       { ...valid(), steps: [{ op: 'hit', expect: { retryAfterMs: { min: 2, max: 1 } } }] },
     ],
     ['an empty expectation', { ...valid(), steps: [{ op: 'hit', expect: {} }] }],
+    ['an uppercase id', { ...valid(), id: 'Example' }],
+    ['an id with a trailing hyphen', { ...valid(), id: 'example-' }],
+    ['a non-string id', { ...valid(), id: 1 }],
+    ['an empty description', { ...valid(), description: '' }],
+    ['a missing description', { ...valid(), description: undefined }],
+    ['no steps', { ...valid(), steps: [] }],
+    ['a zero limit', { ...valid(), config: { limit: 0, windowMs: 1000 } }],
+    ['a zero window', { ...valid(), config: { limit: 1, windowMs: 0 } }],
+    ['an unknown config property', { ...valid(), config: { limit: 1, windowMs: 1000, burst: 2 } }],
+    [
+      'an unknown hit property',
+      { ...valid(), steps: [{ op: 'hit', expect: { allowed: true }, n: 2 }] },
+    ],
+    [
+      'an unknown expectation property',
+      { ...valid(), steps: [{ op: 'hit', expect: { ok: true } }] },
+    ],
+    ['a non-boolean allowed', { ...valid(), steps: [{ op: 'hit', expect: { allowed: 1 } }] }],
+    ['a negative remaining', { ...valid(), steps: [{ op: 'hit', expect: { remaining: -1 } }] }],
+    [
+      'a fractional retryAfterMs',
+      { ...valid(), steps: [{ op: 'hit', expect: { retryAfterMs: 0.5 } }] },
+    ],
+    [
+      'a negative resetAfterMs',
+      { ...valid(), steps: [{ op: 'hit', expect: { resetAfterMs: -1 } }] },
+    ],
+    [
+      'an unknown range property',
+      { ...valid(), steps: [{ op: 'hit', expect: { resetAfterMs: { min: 0, max: 1, mid: 0 } } }] },
+    ],
+    ['a seed with no ages', { ...valid(), steps: [{ op: 'seed', agesMs: [] }] }],
+    ['a seed with a negative age', { ...valid(), steps: [{ op: 'seed', agesMs: [-1] }] }],
+    [
+      'a seed age above 365 days',
+      { ...valid(), steps: [{ op: 'seed', agesMs: [31_536_000_001] }] },
+    ],
+    [
+      'a seed with an unknown property',
+      { ...valid(), steps: [{ op: 'seed', agesMs: [1], ms: 1 }] },
+    ],
+    ['a zero sleep', { ...valid(), steps: [{ op: 'sleep', ms: 0 }] }],
+    ['a sleep above 5 seconds', { ...valid(), steps: [{ op: 'sleep', ms: 5001 }] }],
+    [
+      'a sleep with an unknown property',
+      { ...valid(), steps: [{ op: 'sleep', ms: 1, agesMs: [1] }] },
+    ],
+    ['a non-object step', { ...valid(), steps: ['hit'] }],
   ])('rejects %s', (_name, vector) => {
     expect(isVector(vector)).toBe(false);
   });
