@@ -1,0 +1,61 @@
+{
+  "name": "redis-sliding-window",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sliding-window rate limiter for Redis and Valkey: one atomic Lua script shared by TypeScript and PHP packages.",
+  "keywords": [
+    "rate-limit",
+    "rate-limiter",
+    "sliding-window",
+    "redis",
+    "valkey",
+    "ioredis"
+  ],
+  "license": "MIT",
+  "author": "Georgi Morozov",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/georgimorozov/redis-sliding-window.git"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "lua"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "compile": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run tests/ts/unit",
+    "test:unit": "vitest run tests/ts/unit",
+    "test:integration": "vitest run tests/ts/integration"
+  },
+  "peerDependencies": {
+    "ioredis": "^6.0.0"
+  },
+  "devDependencies": {
+    "@eslint-community/eslint-plugin-eslint-comments": "^4.8.1",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "ioredis": "^6.0.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
+  }
+}

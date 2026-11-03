@@ -42,4 +42,22 @@ PR loop, like the owner's other projects.
 
 ## Commands
 
-Filled in by the scaffold PR (RSW-1): install, test, lint, typecheck for both packages.
+Every check runs in Docker (`scripts/docker-test.sh`, images from `docker/test.Dockerfile`, nothing
+bind-mounted), so the same commands work against the build box; `bin/gate` points Docker there itself
+(`"remote_docker": true`). By hand, first
+`export DOCKER_HOST="$(tr -d '[:space:]' < ~/.config/directives/docker-remote-host)"`. Scripts target bash 3.2.
+
+- TypeScript: `bash scripts/docker-test.sh ts` (Prettier check, ESLint, typecheck, compile on Node 24; unit tests on Node 22, 24, 26).
+- PHP: `bash scripts/docker-test.sh php` (`composer validate --strict`, Pint, PHPStan on PHP 8.4; unit tests on PHP 8.3, 8.4, 8.5).
+- Integration, both languages, against Valkey 9.1: `bash scripts/docker-test.sh integration`.
+- Package checks (the gate's `live` step): `bash scripts/docker-test.sh package`.
+- Fix formatting: `bash scripts/docker-test.sh format` (Prettier); for Pint, apply the diff `pint --test -v` prints.
+- After a dependency change: `bash scripts/docker-test.sh locks` (rewrites `package-lock.json` and `composer.lock`).
+- No Claude attribution on this branch: `bash scripts/check-no-attribution.sh`; its tests: `bash tests/scripts/check-no-attribution.test.sh`.
+- Gate: `bin/gate start tests` until RSW-2 adds the smoke scenarios (`gate start all` needs a `smoke` command).
+
+With Node 24 and PHP 8.4 locally, the package scripts also run directly: `npm ci`, `npm run lint`,
+`npm run typecheck`, `npm test`, `npm run test:integration`; `composer install`, `composer lint`, `composer analyse`,
+`composer test`, `composer test:integration`. Integration tests need a server at `REDIS_HOST`:`REDIS_PORT` (default
+127.0.0.1:6379) and fail without one. Never add a `build`, `prepare`, `prepack`, `preinstall`, `install` or
+`postinstall` script to `package.json` (`docs/release.md`). Contract: `docs/design.md`.

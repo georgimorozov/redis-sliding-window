@@ -1,0 +1,11 @@
+.git
+node_modules
+vendor
+dist
+coverage
+.phpunit.cache
+test-results
+.DS_Store
+.env
+*.tgz
+*.rsw-tmp
