@@ -8,6 +8,7 @@ use GeorgiMorozov\RedisSlidingWindow\ErrorContext;
 use GeorgiMorozov\RedisSlidingWindow\FailMode;
 use GeorgiMorozov\RedisSlidingWindow\SlidingWindowLimiter;
 use GeorgiMorozov\RedisSlidingWindow\UnavailableReport;
+use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Redis\Factory;
 use Psr\Log\LoggerInterface;
@@ -15,7 +16,10 @@ use Psr\Log\LoggerInterface;
 /**
  * The limiters configured in config/redis-sliding-window.php, built once per name on the configured
  * Redis connection's client. A degraded result is logged as a warning (reason, limiter name, fail mode;
- * never the identifier).
+ * never the identifier), at most once a minute per limiter when `warning_store` names a cache store: the
+ * marker is taken with an atomic add() on that store, resolved only on the degraded path. A store that fails
+ * or cannot confirm the marker logs anyway (visibility over strictness), a failure with its exception in the
+ * warning's context; it never throws.
  */
 final class Limiters
 {
@@ -26,7 +30,10 @@ final class Limiters
         private readonly Factory $redis,
         private readonly Repository $config,
         private readonly LoggerInterface $logger,
+        private readonly CacheFactory $cache,
     ) {}
+
+    public const WARNING_TTL_SECONDS = 60;
 
     public function get(string $name): SlidingWindowLimiter
     {
@@ -61,6 +68,9 @@ final class Limiters
             );
         }
         $logger = $this->logger;
+        $warningStore = $this->warningStore();
+        $cache = $this->cache;
+        $marker = 'rsw-warned:' . sha1($prefix . "\0" . $name);
 
         return new SlidingWindowLimiter(
             $client,
@@ -68,14 +78,60 @@ final class Limiters
             $limit,
             $windowMs,
             $failMode,
-            static function (UnavailableReport $report, ErrorContext $context) use ($logger): void {
-                $logger->warning($report->message, [
+            static function (UnavailableReport $report, ErrorContext $context) use ($logger, $cache, $warningStore, $marker): void {
+                $storeError = null;
+                if ($warningStore !== null && !self::claimWarning($cache, $warningStore, $marker, $storeError)) {
+                    return;
+                }
+                $fields = [
                     'limiter' => $context->name,
                     'reason' => $report->reason,
                     'fail_mode' => $context->failMode->value,
-                ]);
+                ];
+                if ($storeError !== null) {
+                    // The throttle could not run: say why on the same line. PSR-3's 'exception' key keeps the
+                    // stack trace for the app's log channel (Sentry's Laravel handler reads it).
+                    $fields['warning_store'] = $warningStore;
+                    $fields['exception'] = $storeError;
+                }
+                $logger->warning($report->message, $fields);
             },
             $prefix,
         );
+    }
+
+    private function warningStore(): ?string
+    {
+        if (!$this->config->has('redis-sliding-window.warning_store')) {
+            return 'file';
+        }
+        $store = $this->config->get('redis-sliding-window.warning_store');
+        if ($store !== null && (!is_string($store) || $store === '')) {
+            throw new \InvalidArgumentException('redis-sliding-window: warning_store must be a cache store name or null');
+        }
+
+        return $store;
+    }
+
+    /**
+     * True when this caller should log: it took the marker, or the store could not show that another did.
+     * A store failure is handed back in $error for the warning's context.
+     */
+    private static function claimWarning(CacheFactory $cache, string $store, string $marker, ?\Throwable &$error): bool
+    {
+        try {
+            $repository = $cache->store($store);
+            if ($repository->add($marker, 1, self::WARNING_TTL_SECONDS)) {
+                return true;
+            }
+
+            return !$repository->has($marker);
+        } catch (\Throwable $e) {
+            // The warning store failed: log the degraded result anyway, with the store's error, and never let it
+            // fail the request.
+            $error = $e;
+
+            return true;
+        }
     }
 }

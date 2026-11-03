@@ -13,6 +13,10 @@ cd "$work/repo"
 git() { command git -c user.name=rsw-test -c user.email=rsw-test@example.invalid "$@"; }
 version="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' package.json)"
 tag="v$version"
+# The clone inherits this checkout's real release tags (v1.0.0 exists once released); drop them all so the
+# test creates and checks only its own tags and never collides with a real one.
+git tag -l | while read -r t; do git tag -d "$t" > /dev/null; done
+[ -z "$(git tag -l)" ] || { echo "release-tag-check.test: could not clear inherited tags" >&2; exit 1; }
 
 # Validation guards, before any container: a fake docker on PATH records any call, so each case must be
 # rejected by its own check with its own message and never reach Docker.

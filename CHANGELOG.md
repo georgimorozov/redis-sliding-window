@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Laravel: during an outage the degraded-result warning is logged at most once a minute per limiter, using a marker in a local Laravel cache store (`warning_store`, env `RSW_WARNING_STORE`, default `file`; `null` logs every result). A failing store logs anyway and never fails the request.
+
 ## [1.0.0] - 2026-11-04
 
 ### Added
