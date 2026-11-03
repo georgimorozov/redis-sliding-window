@@ -1,0 +1,8 @@
+node_modules/
+vendor/
+dist/
+coverage/
+.phpunit.cache/
+.env
+.DS_Store
+test-results/
