@@ -55,7 +55,13 @@ export const loginLimiter = new SlidingWindowLimiter({
   limit: 5,
   windowMs: 15 * 60_000,
   failMode: 'closed',
-  onError: (report, context) => console.warn(`${context.name}: ${report.message}`),
+  onError: (report, context) => {
+    // Use your structured logger or error tracker (Sentry, pino, ...), not console output.
+    appLogger.warn(
+      { limiter: context.name, failMode: context.failMode, reason: report.reason },
+      report.message,
+    );
+  },
 });
 await loginLimiter.load(); // optional: SCRIPT LOAD at startup; throws if the server rejects it
 
@@ -92,7 +98,9 @@ app.post(
 );
 ```
 
-Behind a proxy, set Express's `trust proxy` so `req.ip` is the client's address.
+Behind a proxy, set Express's `trust proxy` to the actual proxy addresses or hop count of your deployment (never
+a blanket `true`), and make sure the last trusted proxy overwrites `X-Forwarded-For`. Otherwise a client can
+rotate that header and get a fresh bucket per request.
 
 ### Hono
 
@@ -116,7 +124,10 @@ app.post('/login', rateLimit(loginLimiter, (c) => clientAddress(c)), loginHandle
 `clientAddress` stands for whatever your runtime or proxy guarantees (for example Hono's `getConnInfo` helper for
 your adapter). A client can set `X-Forwarded-For` itself unless a trusted proxy overwrites it.
 
-### Astro (server output)
+### Astro (server output, Node adapter)
+
+This example needs an adapter that provides a trusted `context.clientAddress` (such as `@astrojs/node`); Astro
+throws when the adapter provides none. On other adapters, use that platform's trusted client-address source.
 
 ```ts
 // src/middleware.ts
@@ -136,7 +147,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
 });
 ```
 
-Create the client and the limiters once, in a module the middleware imports, never per request.
+On long-lived Node servers, create the client and the limiters once, in a module the middleware imports, never
+per request. This library needs a TCP Redis client such as ioredis, so serverless runtimes without one (for
+example Cloudflare Workers, which also forbids reusing a client across requests) are not supported.
 
 ## Usage: PHP and Laravel
 
