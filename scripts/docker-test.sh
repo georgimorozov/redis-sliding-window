@@ -9,10 +9,14 @@
 #   ts           Prettier check, ESLint, typecheck, compile (Node 24); unit tests (Node 22, 24, 26)
 #   php          composer validate --strict, Pint, PHPStan (PHP 8.4); unit tests (PHP 8.3, 8.4, 8.5)
 #   integration  the vectors and both packages' integration tests (PHP: Predis and phpredis) against each server in SERVER_IMAGES
-#   package      the packages as consumers get them (the gate's live step)
+#   package      the packages as consumers get them, and the release helpers' test (the gate's live step)
 #   smoke        consumer scenarios, npm and Composer (tests/smoke, docs/smoke-tests.md) against Valkey 9.1 (the gate's smoke)
 #   format       rewrites the files Prettier would change (build helper, not in the gate)
 #   locks        regenerates package-lock.json and composer.lock (build helper, not in the gate)
+#   release-dist compiles dist/ in a fresh Node container and replaces ./dist with it (release helper)
+#   tag-check T  installs local tag T (vX.Y.Z) as an npm git dependency and a Composer VCS package in
+#                isolated consumers, from a git bundle, and checks what they get (release helper,
+#                docs/release.md; its test: tests/scripts/release-tag-check.test.sh)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -146,6 +150,8 @@ cmd_package() {
   run_in "$IMAGE_TAG" sh -c 'npm run compile && npm pack --dry-run --json | node scripts/check-pack.mjs'
   build_image php "$MAIN_PHP"
   run_in "$IMAGE_TAG" sh -c 'composer dump-autoload --no-dev --classmap-authoritative && php scripts/check-autoload.php'
+  echo "=== release helpers: tests/scripts/release-tag-check.test.sh"
+  bash tests/scripts/release-tag-check.test.sh
 }
 
 cmd_smoke() {
@@ -199,6 +205,59 @@ cmd_locks() {
   echo "docker-test: wrote package-lock.json and composer.lock"
 }
 
+cmd_release_dist() {
+  local name="$prefix-release-dist"
+  build_image node "$MAIN_NODE"
+  # Not run_named: its --rm would remove the container before dist/ is copied out of it.
+  containers="$containers $name"
+  docker create --name "$name" "$IMAGE_TAG" npm run compile > /dev/null
+  docker start -a "$name"
+  rm -rf dist
+  docker cp "$name:/app/dist" dist
+  echo "docker-test: wrote dist/ from a fresh compile"
+}
+
+cmd_tag_check() { # <vX.Y.Z>: never builds, changes or deletes the tag; exits nonzero on any failed check
+  local tag="${1:-}" version commit bundle node_name php_name
+  case "$tag" in
+    v[0-9]*.[0-9]*.[0-9]*) ;;
+    *)
+      echo "usage: scripts/docker-test.sh tag-check vX.Y.Z" >&2
+      exit 1
+      ;;
+  esac
+  version="${tag#v}"
+  if [ "$(git cat-file -t "refs/tags/$tag" 2> /dev/null || true)" != tag ]; then
+    echo "docker-test: $tag is not an annotated tag in this repository" >&2
+    exit 1
+  fi
+  commit="$(git rev-parse "refs/tags/$tag^{commit}")"
+  if [ "$(git show "$commit:package.json" | sed -n 's/^  "version": "\(.*\)",$/\1/p')" != "$version" ]; then
+    echo "docker-test: package.json at $tag does not say version $version" >&2
+    exit 1
+  fi
+  bundle="$(mktemp "${TMPDIR:-/tmp}/rsw-tag.XXXXXX")"
+  tmpfile="$bundle"
+  git bundle create -q "$bundle" "refs/tags/$tag"
+  build_image php "$MAIN_PHP"
+  node_name="$prefix-tag-npm"
+  php_name="$prefix-tag-composer"
+  containers="$containers $node_name $php_name"
+  echo "=== npm consumer: git+file:///repo#$tag"
+  docker create --name "$node_name" -e TAG="$tag" -e COMMIT="$commit" "node:$MAIN_NODE-trixie" \
+    bash /check/npm-consumer.sh > /dev/null
+  docker cp "$bundle" "$node_name:/tmp/tag.bundle"
+  docker cp tests/release "$node_name:/check"
+  docker start -a "$node_name"
+  echo "=== Composer consumer: $version from a VCS repository"
+  docker create --name "$php_name" -e TAG="$tag" -e COMMIT="$commit" -e VERSION="$version" "$IMAGE_TAG" \
+    bash /check/composer-consumer.sh > /dev/null
+  docker cp "$bundle" "$php_name:/tmp/tag.bundle"
+  docker cp tests/release "$php_name:/check"
+  docker start -a "$php_name"
+  echo "docker-test: $tag ($commit) installs with npm and Composer"
+}
+
 case "${1:-}" in
   ts) cmd_ts ;;
   php) cmd_php ;;
@@ -207,8 +266,10 @@ case "${1:-}" in
   smoke) cmd_smoke ;;
   format) cmd_format ;;
   locks) cmd_locks ;;
+  release-dist) cmd_release_dist ;;
+  tag-check) cmd_tag_check "${2:-}" ;;
   *)
-    echo "usage: scripts/docker-test.sh ts|php|integration|package|smoke|format|locks" >&2
+    echo "usage: scripts/docker-test.sh ts|php|integration|package|smoke|format|locks|release-dist|tag-check vX.Y.Z" >&2
     exit 1
     ;;
 esac

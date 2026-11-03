@@ -9,7 +9,8 @@ PHP packages that share it.
 - An explicit fail-open or fail-closed choice when the server cannot answer, reported through your callback.
 - TypeScript (ioredis) and PHP (Predis, phpredis, plus a Laravel middleware), tested against the same vectors.
 
-Status: in development; the first release (v1.0.0) is planned (`docs/roadmap.md`). The contract (bucket keys, the
+Status: v1.0.0 is the first stable release; install it by pinning the `v1.0.0` tag (changes in `CHANGELOG.md`,
+release process in `docs/release.md`). The contract (bucket keys, the
 script's interface, both APIs, the failure policy and the test plan) is `docs/design.md`.
 
 ## Why a sliding window
