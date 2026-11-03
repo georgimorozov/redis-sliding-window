@@ -6,8 +6,9 @@ import comments from '@eslint-community/eslint-plugin-eslint-comments/configs';
 import eslintConfigPrettier from 'eslint-config-prettier/flat';
 
 // defineConfig flattens config arrays. ESLint ignores node_modules/ and .git/ by default.
+// tests/release/consumer.ts imports the installed package, so only tag-check's consumer can type-check it.
 export default defineConfig(
-  globalIgnores(['dist/', 'coverage/', 'vendor/']),
+  globalIgnores(['dist/', 'coverage/', 'vendor/', 'tests/release/consumer.ts']),
   js.configs.recommended,
   tseslint.configs.recommended,
   // Every eslint-disable directive carries a "-- <reason>", and a disable block needs its enable.

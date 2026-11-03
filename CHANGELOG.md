@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-04
+
 ### Added
 
 - README: why a sliding window, install by git tag for both languages, Express, Hono, Astro and Laravel examples, the failure policy, connection advice, per-call cost and limits.
@@ -17,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The sliding-window Lua script (`lua/sliding-window.lua`): one atomic call on the server's clock, with nonce-based replay protection and a retry time that holds when a lowered limit leaves a bucket overfull.
 - The TypeScript package: `SlidingWindowLimiter` for ioredis (`load()` with `SCRIPT LOAD`, `hit()` with `EVALSHA` and an `EVAL` fallback on `NOSCRIPT`), input and reply validation, the fail-open or fail-closed policy with the `onError` callback, and `retryAfterSeconds()` for a 429's `Retry-After`.
 - Tests: unit tests, the shared vectors and integration tests (including a 40-way concurrent burst) against Valkey 9.1, Valkey 7.2 and Redis 7.2, and consumer smoke scenarios run from the packed tarball (`docs/smoke-tests.md`).
+- Release helpers: `scripts/docker-test.sh release-dist` builds `dist/` for a release commit and `tag-check` proves a local tag installs with npm and Composer (`docs/release.md`).
 - Project scaffold: the TypeScript `FailMode` and `LimitResult` types, the PHP `FailMode` enum, two shared test vectors, Docker-based checks (unit tests, integration tests against Valkey, package checks), and the release procedure (`docs/release.md`).
 
-[Unreleased]: https://github.com/georgimorozov/redis-sliding-window/commits/main
+[Unreleased]: https://github.com/georgimorozov/redis-sliding-window/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/georgimorozov/redis-sliding-window/releases/tag/v1.0.0

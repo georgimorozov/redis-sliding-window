@@ -16,8 +16,8 @@ which is why `composer.json` has no `version` field.
 
 ## Steps
 
-RSW-5 (the first release) adds the command that builds `dist/` (step 2) and a check that the local tag installs
-before it is pushed. No release is cut before then.
+Run the Docker helpers with `DOCKER_HOST` pointing at the build box (`CLAUDE.md`, "Commands"), or against a
+local daemon.
 
 1. Release PR, through the normal flow. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`
    (UTC date), add an empty `## [Unreleased]` above it, and update the links at the bottom:
@@ -25,9 +25,26 @@ before it is pushed. No release is cut before then.
    `[X.Y.Z]: https://github.com/georgimorozov/redis-sliding-window/compare/vPREVIOUS...vX.Y.Z` (first release:
    `.../releases/tag/vX.Y.Z`). Set `"version": "X.Y.Z"` in `package.json` and in both root entries of
    `package-lock.json`.
-2. After the merge, from `git switch --detach origin/main`: build `dist/` (RSW-5), `git add -f dist`, commit
-   `Release vX.Y.Z: compiled files`, run `bash scripts/check-no-attribution.sh origin/main`, then
+2. After the merge: `git fetch origin`, `git switch --detach origin/main`, and check `git status --short --ignored`
+   shows nothing but ignored dependency folders. Then `bash scripts/docker-test.sh release-dist` (compiles in a
+   fresh Node 24 container and replaces `./dist` with the output, so no stale file survives), `git add -f dist`,
+   commit `Release vX.Y.Z: compiled files`, check `git diff --name-only HEAD~1 HEAD` lists only `dist/` files and
+   `HEAD~1` is `origin/main`, run `bash scripts/check-no-attribution.sh origin/main`, then
    `git tag -a vX.Y.Z -m vX.Y.Z`.
-3. `git push origin vX.Y.Z`, write the tag's CHANGELOG section to a notes file, and run
-   `gh release create vX.Y.Z --repo georgimorozov/redis-sliding-window --verify-tag --title vX.Y.Z --notes-file <file>`.
+3. `bash scripts/docker-test.sh tag-check vX.Y.Z`, before anything is pushed. It copies the tag to two fresh
+   consumers as a git bundle (no checkout files, no build): npm installs `git+file:///repo#vX.Y.Z` with its normal
+   lifecycle behaviour and the check confirms the resolved commit is the tag's, `dist/` and `lua/` shipped, no
+   lifecycle script or dev dependency came along, the ESM import works and a NodeNext TypeScript consumer
+   type-checks; Composer requires exactly `X.Y.Z` from the tag as a VCS repository and the check confirms the
+   commit, the consumer's autoloader and that the Lua script loads. It never changes the tag. If it fails, delete
+   the local tag and release commit (`git tag -d vX.Y.Z`), fix on `main` through a PR, and start step 2 again. A
+   local check does not exercise GitHub's ZIP download path for Composer; install from GitHub once after step 4.
+4. `git push origin vX.Y.Z`, write the tag's CHANGELOG section to a notes file
+   (`git show vX.Y.Z:CHANGELOG.md | awk '/^## \[X\.Y\.Z\]/{p=1;next} /^## \[|^\[/{p=0} p' > notes.md`, with the
+   version's dots escaped), and run
+   `gh release create vX.Y.Z --repo georgimorozov/redis-sliding-window --verify-tag --title vX.Y.Z --notes-file notes.md`.
    `--verify-tag` matters: without it, `gh` creates a missing tag from the default branch, which has no `dist/`.
+
+`bash tests/scripts/release-tag-check.test.sh` (part of the gate's `package` step) runs steps 2 and 3 in a
+disposable clone of the current commit: a tag without `dist/` must fail `tag-check` on the missing compiled files,
+and a tag with the `release-dist` output must pass.
