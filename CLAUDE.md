@@ -49,8 +49,8 @@ bind-mounted), so the same commands work against the build box; `bin/gate` point
 
 - TypeScript: `bash scripts/docker-test.sh ts` (Prettier check, ESLint, typecheck, compile on Node 24; unit tests on Node 22, 24, 26).
 - PHP: `bash scripts/docker-test.sh php` (`composer validate --strict`, Pint, PHPStan on PHP 8.4; unit tests on PHP 8.3, 8.4, 8.5).
-- Vectors and integration, both languages, against Valkey 9.1, Valkey 7.2 and Redis 7.2: `bash scripts/docker-test.sh integration`.
-- Smoke (consumer scenarios from the packed tarball, `docs/smoke-tests.md`): `bash scripts/docker-test.sh smoke`.
+- Vectors and integration, both languages (PHP: Predis and phpredis), against Valkey 9.1, Valkey 7.2 and Redis 7.2: `bash scripts/docker-test.sh integration`.
+- Smoke (npm and Composer consumer scenarios, `docs/smoke-tests.md`): `bash scripts/docker-test.sh smoke`.
 - Package checks (the gate's `live` step): `bash scripts/docker-test.sh package`.
 - Fix formatting: `bash scripts/docker-test.sh format` (Prettier); for Pint, apply the diff `pint --test -v` prints.
 - After a dependency change: `bash scripts/docker-test.sh locks` (rewrites `package-lock.json` and `composer.lock`).
@@ -59,6 +59,7 @@ bind-mounted), so the same commands work against the build box; `bin/gate` point
 
 With Node 24 and PHP 8.4 locally, the package scripts also run directly: `npm ci`, `npm run lint`,
 `npm run typecheck`, `npm test`, `npm run test:feature`, `npm run test:integration`; `composer install`, `composer lint`, `composer analyse`,
-`composer test`, `composer test:integration`. Integration tests need a server at `REDIS_HOST`:`REDIS_PORT` (default
+`composer test`, `composer test:feature`, `composer test:integration` (feature and integration cover Predis and phpredis; phpredis 6.3 is in
+the PHP test images, and phpredis before 6.3 fails the refused-reconnect tests by design). Integration tests need a server at `REDIS_HOST`:`REDIS_PORT` (default
 127.0.0.1:6379) and fail without one. Never add a `build`, `prepare`, `prepack`, `preinstall`, `install` or
 `postinstall` script to `package.json` (`docs/release.md`). Contract: `docs/design.md`.

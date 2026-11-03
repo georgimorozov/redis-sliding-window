@@ -18,7 +18,7 @@ client-level key prefixes.
 
 `lua/sliding-window.lua` the script (RSW-2) · `src/` TypeScript (ESM) · `dist/` compiled, only in release tags ·
 `php/src/` PHP, PSR-4 `GeorgiMorozov\RedisSlidingWindow\` · `tests/ts/{unit,integration}/` Vitest ·
-`php/tests/{Unit,Integration}/` PHPUnit suites `unit`, `integration` · `tests/vectors/` shared vectors ·
+`php/tests/{Unit,Feature,Integration}/` PHPUnit suites `unit`, `feature`, `integration` · `php/src/Laravel/` the Laravel integration, `php/config/` its config · `tests/vectors/` shared vectors ·
 `tests/scripts/` tests for repository scripts · `scripts/`, `docker/` gate and helpers.
 
 ## Buckets and keys
@@ -139,7 +139,7 @@ Validation errors are programming errors: they throw in both modes and never rea
 
 | Input | Rule | TypeScript | PHP |
 |---|---|---|---|
-| `client` | TS: an ioredis `Redis` (not `Cluster`) whose `options.db` is `undefined` or `0` and whose `options.keyPrefix` is unset or empty. PHP: a Predis `ClientInterface` or a phpredis `\Redis`, one node, no client key prefix (Predis `prefix`, phpredis `OPT_PREFIX`; RSW-3 picks the checks) | `TypeError` | `InvalidArgumentException` |
+| `client` | TS: an ioredis `Redis` (not `Cluster`) whose `options.db` is `undefined` or `0` and whose `options.keyPrefix` is unset or empty. PHP: a Predis `ClientInterface` whose `getConnection()` is a `NodeConnectionInterface` other than `RelayConnection` (no cluster, replication or aggregate) and whose `prefix` option is unset or an empty `KeyPrefixProcessor`; or a phpredis `\Redis` whose `OPT_PREFIX` is unset or empty (read again on the first call when phpredis cannot read options after a failed connect) | `TypeError` | `InvalidArgumentException` |
 | `name` | as in "Buckets and keys" | `TypeError` | `InvalidArgumentException` |
 | `limit` | integer, 1 to 2^53 - 1 | `TypeError` | `InvalidArgumentException` |
 | `windowMs` | integer, 1 to 31536000000 | `TypeError` | `InvalidArgumentException` |
@@ -214,6 +214,17 @@ final class SlidingWindowLimiter
 }
 ```
 
+### Laravel
+
+`RedisSlidingWindowServiceProvider` (auto-discovered through `extra.laravel.providers`) merges
+`config/redis-sliding-window.php` (`connection`, `prefix`, `limiters`: name => `limit`, `window_ms`, `fail_mode`),
+binds `Laravel\Limiters` as a singleton (one limiter per name, on the connection's `client()`) and registers
+the route middleware alias `sliding-window`. `sliding-window:<name>` hits once per request with the identifier
+`user:<auth id>` when signed in, else `ip:<client IP>`, and throws `ThrottleRequestsException` with `Retry-After`
+(Laravel renders a 429) when denied. A degraded result is logged as a warning (`limiter`, `reason`,
+`fail_mode`; never the identifier). Validation errors from the config throw. Nothing calls `load()`: the
+`NOSCRIPT` fallback loads the script on first use.
+
 ## Failure policy
 
 Every error from `hit()`'s script call goes through one stateless rule, the same in both modes:
@@ -231,7 +242,7 @@ Every error from `hit()`'s script call goes through one stateless rule, the same
 |---|---|---|
 | ioredis 6 | `ReplyError`. Calls waiting in the offline queue receive the server's `AUTH` refusal this way | message exactly `Command timed out` (`timeout`); exactly `Connection is closed.`, exactly `Stream isn't writeable and enableOfflineQueue options is false`, or `name === 'MaxRetriesPerRequestError'` (`connection`) |
 | Predis 3 | `ServerException`, or a returned `ErrorInterface` with `exceptions` off (code: `getErrorType()`); a `ConnectionException` whose message starts with `Failed: `, which is a setup command's reply (code: the next word) | `TimeoutException` (`timeout`); any other `ConnectionException`, and `StreamInitException` (`connection`), except a `StreamInitException` starting `Error while setting SSL context options`, a client configuration error, which throws |
-| phpredis 6 | The package calls `clearLastError()` before each call. A `RedisException` or `false` while `getLastError()` holds a string is that reply. That includes `AUTH failed while reconnecting` / `SELECT failed while reconnecting` when phpredis recorded the server's refusal | a `RedisException` while `getLastError()` is null, unless its message starts with `protocol error` (`connection`). That includes the two reconnect messages when the socket failed during `AUTH` or `SELECT` |
+| phpredis 6.3+ | The package calls `clearLastError()` before each call and sends commands with `rawCommand()` (no prefix, serializer or compression). A `RedisException` or `false` while `getLastError()` holds a string is that reply. That includes `AUTH failed while reconnecting` / `SELECT failed while reconnecting` when phpredis recorded the server's refusal | a `RedisException` while `getLastError()` is null, unless its message starts with `protocol error` (`connection`). That includes the two reconnect messages when the socket failed during `AUTH` or `SELECT`, and a client whose connect failed (phpredis then throws from `getLastError()` itself). phpredis before 6.3 does not record a refused reconnect `AUTH`, so there it degrades |
 
 A reply that must throw but came back as a value (Predis `ErrorInterface`, phpredis `false`) is thrown as the
 client's own exception (`Predis\Response\ServerException`, `RedisException`) with the reply as its message.
@@ -288,8 +299,11 @@ The library never creates, connects or closes a client. Pass one long-lived clie
 once at startup.
 - ioredis: one client at module level; set `commandTimeout` (for example 1000 ms) and a low `maxRetriesPerRequest`
   (for example 1); listen for `error` events. Either offline-queue setting works.
-- PHP-FPM: persistent connections (Predis `persistent`, phpredis `pconnect()` with a `persistent_id`) with read
-  timeouts; RSW-3 documents exact settings.
+- PHP-FPM: persistent connections with short timeouts. Predis: `'persistent' => true` (or a string id per pool),
+  `'timeout' => 1.0` (connect), `'read_write_timeout' => 1.0`. phpredis: `pconnect($host, $port, 1.0,
+  'rate-limit', 0, 1.0)` (connect timeout, `persistent_id`, retry interval, read timeout). Laravel: a dedicated
+  connection with `'prefix' => ''`, `'persistent' => true`, `'timeout' => 1.0` and `'read_timeout' => 1.0`
+  (phpredis) or `'read_write_timeout' => 1.0` (Predis); see `docs/php.md`.
 - A fresh connection per request, especially a fresh TLS connection, is a known failure mode: every request pays the
   handshake and every network blip, and under load the handshakes exhaust the server's or proxy's connection
   capacity.
@@ -314,7 +328,8 @@ once at startup.
 | PHP | ^8.3, 64-bit | unit on 8.3, 8.4, 8.5; everything else on 8.4. PHPUnit 12 because it supports 8.3 |
 | ioredis | ^6 (peer) | the locked version |
 | Predis | ^3.7 (suggest) | the locked version |
-| phpredis | 6 (suggest) | from RSW-3 |
+| phpredis | 6.3+ (suggest) | 6.3.0, in every PHP test image |
+| Laravel | not required (suggest) | the locked version (13) through Orchestra Testbench |
 | Servers | Redis 7.2+, Valkey 7.2+ | integration and vectors on Valkey 9.1, Valkey 7.2 and Redis 7.2; smoke on Valkey 9.1 |
 
 ## Test plan
@@ -382,4 +397,4 @@ Integration (real server):
   limiter call succeeds against another database.
 
 Smoke: RSW-2 adds the gate's `smoke` command (`scripts/docker-test.sh smoke`) and the consumer scenario scripts in
-`tests/smoke/`, run from the packed tarball; RSW-3 extends them for PHP.
+`tests/smoke/`, run from the packed tarball; RSW-3 adds `tests/smoke/php/`, run from the `composer archive` of the package.

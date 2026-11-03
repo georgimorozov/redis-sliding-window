@@ -3,32 +3,82 @@
     "description": "Sliding-window rate limiter for Redis and Valkey: one atomic Lua script shared by PHP and TypeScript packages.",
     "type": "library",
     "license": "MIT",
-    "keywords": ["rate-limit", "rate-limiter", "sliding-window", "redis", "valkey"],
-    "authors": [{ "name": "Georgi Morozov" }],
+    "keywords": [
+        "rate-limit",
+        "rate-limiter",
+        "sliding-window",
+        "redis",
+        "valkey"
+    ],
+    "authors": [
+        {
+            "name": "Georgi Morozov"
+        }
+    ],
     "require": {
         "php": "^8.3",
         "php-64bit": "^8.3"
     },
     "require-dev": {
         "laravel/pint": "^1.32",
+        "orchestra/testbench": "^11.3",
         "phpstan/phpstan": "^2.3",
         "phpunit/phpunit": "^12.5",
         "predis/predis": "^3.7"
     },
     "suggest": {
-        "ext-redis": "To use the limiter with phpredis 6.",
+        "ext-redis": "To use the limiter with phpredis 6.3 or later.",
+        "laravel/framework": "For the Laravel middleware and auto-discovered service provider (tested with Laravel 13).",
         "predis/predis": "To use the limiter with Predis 3.7 or later."
     },
-    "autoload": { "psr-4": { "GeorgiMorozov\\RedisSlidingWindow\\": "php/src/" } },
-    "autoload-dev": { "psr-4": { "GeorgiMorozov\\RedisSlidingWindow\\Tests\\": "php/tests/" } },
+    "autoload": {
+        "psr-4": {
+            "GeorgiMorozov\\RedisSlidingWindow\\": "php/src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "GeorgiMorozov\\RedisSlidingWindow\\Tests\\": "php/tests/"
+        }
+    },
     "scripts": {
         "lint": "pint --test",
         "format": "pint",
         "analyse": "phpstan analyse --no-progress",
         "test": "phpunit --testsuite unit",
+        "test:feature": "phpunit --testsuite feature",
         "test:integration": "phpunit --testsuite integration"
     },
-    "config": { "sort-packages": true, "platform": { "php": "8.3.0" } },
+    "config": {
+        "sort-packages": true,
+        "platform": {
+            "php": "8.3.0"
+        }
+    },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "extra": {
+        "laravel": {
+            "providers": [
+                "GeorgiMorozov\\RedisSlidingWindow\\Laravel\\RedisSlidingWindowServiceProvider"
+            ]
+        }
+    },
+    "archive": {
+        "exclude": [
+            "/node_modules",
+            "/vendor",
+            "/dist",
+            "/coverage",
+            "/tests",
+            "/php/tests",
+            "/docker",
+            "/scripts",
+            "/.*",
+            "/*.tgz",
+            "/*.rsw-tmp",
+            "/package-lock.json",
+            "/composer.lock"
+        ]
+    }
 }

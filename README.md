@@ -11,8 +11,10 @@ script's interface, both APIs, the failure policy and the test plan) is `docs/de
 ```mermaid
 flowchart LR
   app_ts["Node.js app"] --> ts["TypeScript package (src/)"]
-  app_php["PHP or Laravel app"] --> php["PHP package (php/src/)"]
+  app_php["PHP app"] --> php["PHP package (php/src/)"]
   ts -->|"ioredis: SCRIPT LOAD at startup, EVALSHA, EVAL on NOSCRIPT"| server[("Redis or Valkey")]
+  app_laravel["Laravel app"] -->|"sliding-window:name middleware"| laravel["Laravel integration (php/src/Laravel/)"]
+  laravel -->|"Limiters registry, config/redis-sliding-window.php"| php
   php -->|"Predis or phpredis: SCRIPT LOAD at startup, EVALSHA, EVAL on NOSCRIPT"| server
   lua["lua/sliding-window.lua"] -.->|"same script text"| ts
   lua -.->|"same script text"| php
@@ -25,7 +27,8 @@ once: it reads the server's clock, drops entries older than the window, and eith
 when to retry. If the server cannot answer, the limiter fails open or closed, as the caller chose, and reports the
 outage through the caller's callback; a server reply that rejects the credentials or the configuration throws.
 
-The script and the TypeScript package (`SlidingWindowLimiter`, `retryAfterSeconds`) are implemented; the PHP package
-comes next (roadmap RSW-3), and usage documentation with the first release (RSW-4, RSW-5).
+The script, the TypeScript package (`SlidingWindowLimiter`, `retryAfterSeconds`) and the PHP package (`SlidingWindowLimiter`
+for Predis and phpredis, plus a Laravel middleware and auto-discovered service provider, `docs/php.md`) are
+implemented; full usage documentation comes with the first release (RSW-4, RSW-5).
 
 License: MIT.
