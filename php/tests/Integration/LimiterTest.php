@@ -386,11 +386,12 @@ final class LimiterTest extends TestCase
     #[DataProvider('reconnects')]
     public function a_phpredis_reconnect(string $scenario, FailMode $mode, bool $degrades): void
     {
-        $port = random_int(20000, 40000);
-        $server = proc_open([PHP_BINARY, __DIR__ . '/bin/fake-server.php', (string) $port, $scenario], [1 => ['pipe', 'w']], $pipes);
+        $server = proc_open([PHP_BINARY, __DIR__ . '/bin/fake-server.php', $scenario], [1 => ['pipe', 'w']], $pipes);
         self::assertIsResource($server);
         try {
-            self::assertSame("ready\n", fgets($pipes[1]));
+            $ready = (string) fgets($pipes[1]);
+            self::assertMatchesRegularExpression('/^ready (\d+)\n$/', $ready);
+            $port = (int) substr($ready, 6);
             $client = new \Redis();
             $client->connect('127.0.0.1', $port, 1.0, null, 0, 1.0);
             if ($scenario === 'select-lost') {

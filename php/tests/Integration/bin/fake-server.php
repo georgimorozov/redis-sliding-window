@@ -2,17 +2,19 @@
 
 declare(strict_types=1);
 
-// A fake server for phpredis reconnect tests: php fake-server.php <port> <auth-lost|select-lost|auth-refused>.
+// A fake server for phpredis reconnect tests: php fake-server.php <auth-lost|select-lost|auth-refused>.
 // Connection 1 answers AUTH and SELECT with +OK, then closes. Connection 2 (phpredis reconnecting) gets, for
-// its AUTH or SELECT: no reply and a closed socket (…-lost), or -WRONGPASS (auth-refused). Prints "ready".
+// its AUTH or SELECT: no reply and a closed socket (…-lost), or -WRONGPASS (auth-refused). It binds port 0 (the kernel picks a free port, so there is no race with other
+// listeners) and prints "ready <port>".
 
-[, $port, $mode] = $argv;
-$server = stream_socket_server("tcp://127.0.0.1:{$port}", $errno, $errstr);
+[, $mode] = $argv;
+$server = stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
 if ($server === false) {
     fwrite(STDERR, "fake-server: {$errstr}\n");
     exit(1);
 }
-echo "ready\n";
+$address = (string) stream_socket_get_name($server, false);
+echo 'ready ' . substr($address, strrpos($address, ':') + 1) . "\n";
 
 /**
  * @param resource $connection
