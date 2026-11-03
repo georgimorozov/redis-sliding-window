@@ -16,10 +16,13 @@ final class PhpRedisAdapter implements Adapter
 
     public function __construct(private readonly \Redis $client)
     {
-        // phpredis cannot read options from a client whose connection failed; the first call checks again.
+        // phpredis cannot read options from a client whose connection failed. That is deferred, not dropped:
+        // the check stays pending and call() repeats it, so a read that still fails reaches hit() as an
+        // outage (classified and reported through onError) and a prefix found then still throws.
         try {
             $this->checkPrefix();
         } catch (\RedisException) {
+            $this->prefixChecked = false;
         }
     }
 

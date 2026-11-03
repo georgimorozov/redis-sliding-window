@@ -118,6 +118,7 @@ final class LaravelTest extends TestCase
         // docs/design-pitfalls PIT-1: a cache connection failure must not fail a fairness-limited request.
         $this->script([
             static fn(NodeConnectionInterface $c): \Throwable => new StreamInitException('Connection timed out'),
+            static fn(NodeConnectionInterface $c): \Throwable => new StreamInitException('Connection timed out'),
             static fn(NodeConnectionInterface $c): \Throwable => new ConnectionException($c, 'Connection refused [tcp://127.0.0.1:6379]'),
         ]);
         $this->get('/api')->assertOk()->assertContent('ok');

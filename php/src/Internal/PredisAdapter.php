@@ -42,7 +42,16 @@ final class PredisAdapter implements Adapter
     public function call(array $command): mixed
     {
         $id = array_shift($command);
-        $reply = $this->client->executeCommand(new RawCommand($id, $command));
+        try {
+            $reply = $this->client->executeCommand(new RawCommand($id, $command));
+        } catch (StreamInitException $error) {
+            // The socket could not be opened, so nothing was sent: retry once.
+            // Never retried: timeouts and lost replies, which may follow a command the server ran.
+            if ($this->classify($error) === null) {
+                throw $error;
+            }
+            $reply = $this->client->executeCommand(new RawCommand($id, $command));
+        }
         if ($reply instanceof ErrorInterface) {
             throw new ServerException($reply->getMessage());
         }

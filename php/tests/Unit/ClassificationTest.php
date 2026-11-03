@@ -44,10 +44,45 @@ final class ClassificationTest extends TestCase
     {
         foreach (FailMode::cases() as $mode) {
             $reports = [];
-            $fake = new FakePredis([$failure]);
+            // Twice: a setup failure is retried once (PIT-1), so it degrades only when the retry fails too.
+            $fake = new FakePredis([$failure, $failure]);
             $limiter = self::limiter($fake->client, $mode, $reports);
             self::assertOutcome($limiter, $reason, $mode, $reports);
         }
+    }
+
+    #[Test]
+    public function a_predis_connection_setup_failure_is_retried_once_with_the_same_nonce(): void
+    {
+        $reports = [];
+        $fake = new FakePredis([static fn() => new StreamInitException('Connection timed out'), [1, 2, 0, 60000]]);
+        $result = self::limiter($fake->client, FailMode::Closed, $reports)->hit('x');
+        self::assertFalse($result->degraded);
+        self::assertTrue($result->allowed);
+        self::assertSame([], $reports);
+        self::assertCount(2, $fake->sent);
+        self::assertSame($fake->sent[0], $fake->sent[1]);
+    }
+
+    /** @return iterable<string, array{\Closure(NodeConnectionInterface): \Throwable}> */
+    public static function predisFailuresAfterDispatch(): iterable
+    {
+        yield 'timeout' => [static fn(NodeConnectionInterface $c) => new TimeoutException($c)];
+        yield 'lost reply' => [static fn(NodeConnectionInterface $c) => new ConnectionException($c, 'Error while reading line from the server. [tcp://127.0.0.1:6379]')];
+        yield 'SSL context' => [static fn() => new StreamInitException('Error while setting SSL context options')];
+    }
+
+    #[Test]
+    #[DataProvider('predisFailuresAfterDispatch')]
+    public function a_failure_that_may_follow_dispatch_is_not_resent(\Closure $failure): void
+    {
+        $reports = [];
+        $fake = new FakePredis([$failure, [1, 2, 0, 60000]]);
+        try {
+            self::limiter($fake->client, FailMode::Closed, $reports)->hit('x');
+        } catch (\Throwable) {
+        }
+        self::assertCount(1, $fake->sent);
     }
 
     #[Test]
