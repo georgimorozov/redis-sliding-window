@@ -18,7 +18,8 @@ use Psr\Log\LoggerInterface;
  * Redis connection's client. A degraded result is logged as a warning (reason, limiter name, fail mode;
  * never the identifier), at most once a minute per limiter when `warning_store` names a cache store: the
  * marker is taken with an atomic add() on that store, resolved only on the degraded path. A store that fails
- * or cannot confirm the marker logs anyway (visibility over strictness); it never throws.
+ * or cannot confirm the marker logs anyway (visibility over strictness), a failure with its exception in the
+ * warning's context; it never throws.
  */
 final class Limiters
 {
@@ -78,14 +79,22 @@ final class Limiters
             $windowMs,
             $failMode,
             static function (UnavailableReport $report, ErrorContext $context) use ($logger, $cache, $warningStore, $marker): void {
-                if ($warningStore !== null && !self::claimWarning($cache, $warningStore, $marker)) {
+                $storeError = null;
+                if ($warningStore !== null && !self::claimWarning($cache, $warningStore, $marker, $storeError)) {
                     return;
                 }
-                $logger->warning($report->message, [
+                $fields = [
                     'limiter' => $context->name,
                     'reason' => $report->reason,
                     'fail_mode' => $context->failMode->value,
-                ]);
+                ];
+                if ($storeError !== null) {
+                    // The throttle could not run: say why on the same line. PSR-3's 'exception' key keeps the
+                    // stack trace for the app's log channel (Sentry's Laravel handler reads it).
+                    $fields['warning_store'] = $warningStore;
+                    $fields['exception'] = $storeError;
+                }
+                $logger->warning($report->message, $fields);
             },
             $prefix,
         );
@@ -104,8 +113,11 @@ final class Limiters
         return $store;
     }
 
-    /** True when this caller should log: it took the marker, or the store could not show that another did. */
-    private static function claimWarning(CacheFactory $cache, string $store, string $marker): bool
+    /**
+     * True when this caller should log: it took the marker, or the store could not show that another did.
+     * A store failure is handed back in $error for the warning's context.
+     */
+    private static function claimWarning(CacheFactory $cache, string $store, string $marker, ?\Throwable &$error): bool
     {
         try {
             $repository = $cache->store($store);
@@ -114,9 +126,11 @@ final class Limiters
             }
 
             return !$repository->has($marker);
-        } catch (\Throwable) {
-            // The warning store failed: log the degraded result anyway (its error is not ours to report and may
-            // carry paths or hosts, see UnavailableReport), and never let it fail the request.
+        } catch (\Throwable $e) {
+            // The warning store failed: log the degraded result anyway, with the store's error, and never let it
+            // fail the request.
+            $error = $e;
+
             return true;
         }
     }

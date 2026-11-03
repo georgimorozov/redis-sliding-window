@@ -195,11 +195,15 @@ final class LaravelTest extends TestCase
     {
         $log = Log::spy();
         $this->busy(3);
-        $this->cacheFactory(null, new \RuntimeException('disk full'));
+        $error = new \RuntimeException('disk full');
+        $this->cacheFactory(null, $error);
         $this->get('/api')->assertOk();
         $this->get('/api')->assertOk();
         $this->get('/login')->assertStatus(429)->assertHeader('Retry-After', '60');
         $log->shouldHaveReceived('warning')->times(3);
+        // The store's failure is reported on the same line (PSR-3 'exception', so Sentry keeps its stack trace).
+        $log->shouldHaveReceived('warning')->with(self::BUSY, ['limiter' => 'api', 'reason' => 'BUSY', 'fail_mode' => 'open', 'warning_store' => 'array', 'exception' => $error])->twice();
+        $log->shouldHaveReceived('warning')->with(self::BUSY, ['limiter' => 'login', 'reason' => 'BUSY', 'fail_mode' => 'closed', 'warning_store' => 'array', 'exception' => $error])->once();
     }
 
     #[Test]

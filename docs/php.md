@@ -92,10 +92,11 @@ Route::post('/login', LoginController::class)->middleware('sliding-window:login'
 The middleware keys requests by the signed-in user's id, else the client IP (behind a proxy, configure Laravel's
 trusted proxies so `$request->ip()` is the client's). A denied request becomes a 429 with `Retry-After`. A
 degraded result is logged as a warning through Laravel's logger (limiter name, reason and fail mode, never the
-identifier), so it reaches whatever your log channel reports to. During an outage that is at most one warning a
+identifier) on the default log channel; to see it in Sentry, include Sentry's channel in that channel (for
+example a `stack` with `sentry`) in production only, as the library adds no log destination of its own. During an outage that is at most one warning a
 minute per limiter: the first degraded result takes a marker in the cache store named by `warning_store` (env
 `RSW_WARNING_STORE`, default `file`), and later ones skip the log until it expires. Use a local store such as
 `file`, never Redis (the Redis that is down would decide whether to log). It is best effort: the marker is per
 cache directory or host, so N servers log up to N warnings a minute, and a store that fails or cannot confirm the
-marker logs anyway. `'warning_store' => null` logs every degraded result. For other keys, resolve
+marker logs anyway (a failure adds `warning_store` and the store's `exception` to the warning's context). `'warning_store' => null` logs every degraded result. For other keys, resolve
 `GeorgiMorozov\RedisSlidingWindow\Laravel\Limiters` and call `->get('login')->hit($identifier)`.

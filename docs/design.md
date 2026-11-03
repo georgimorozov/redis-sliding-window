@@ -225,7 +225,7 @@ the route middleware alias `sliding-window`. `sliding-window:<name>` hits once p
 `fail_mode`; never the identifier), at most once a minute per limiter: inside the `onError` callback (still called
 once per degraded result), the first caller takes the marker `rsw-warned:` + sha1(prefix, NUL, name) with an atomic
 `add()` (TTL 60 s) on the `warning_store` cache store (default `file`, resolved only on the degraded path); when
-`add()` is false a follow-up `has()` that finds no marker logs anyway, and a store error logs anyway (visibility
+`add()` is false a follow-up `has()` that finds no marker logs anyway, and a store error logs anyway, with the error as the warning's `exception` (visibility
 over strictness; the store never throws to the caller). A logger error reaches the core's callback boundary. Best
 effort: scope is the store's directory or host, and the marker is taken before logging, so a crash between the two
 loses that minute's warning. `warning_store => null` logs every degraded result. Validation errors from the config throw. Nothing calls `load()`: the

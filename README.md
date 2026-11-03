@@ -181,7 +181,9 @@ Route::post('/login', LoginController::class)->middleware('sliding-window:login'
 ```
 
 The middleware keys requests by the signed-in user's id, else the client IP, and answers a denied request with a
-429 and `Retry-After`. Configuration, the connection (it needs an empty key prefix), phpredis and the `onError`
+429 and `Retry-After`. During an outage it logs at most one warning a minute per limiter, through Laravel's
+logger, using a marker in the cache store named by `warning_store` (default `file`; never Redis; `null` logs
+every degraded result). Configuration, the connection (it needs an empty key prefix), phpredis and the `onError`
 callback: `docs/php.md`.
 
 ## Failure policy
@@ -241,6 +243,8 @@ flowchart LR
   ts -->|"ioredis: SCRIPT LOAD at startup, EVALSHA, EVAL on NOSCRIPT"| server[("Redis or Valkey")]
   app_laravel["Laravel app"] -->|"sliding-window:name middleware"| laravel["Laravel integration (php/src/Laravel/)"]
   laravel -->|"Limiters registry, config/redis-sliding-window.php"| php
+  laravel -->|"degraded result: add() a marker, 1 per minute per limiter"| warn_store[("Laravel cache store (warning_store, default file)")]
+  laravel -->|"degraded warning"| logger["Laravel logger"]
   php -->|"Predis or phpredis: SCRIPT LOAD at startup, EVALSHA, EVAL on NOSCRIPT"| server
   lua["lua/sliding-window.lua"] -.->|"same script text"| ts
   lua -.->|"same script text"| php
