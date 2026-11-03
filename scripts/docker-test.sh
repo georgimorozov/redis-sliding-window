@@ -8,9 +8,9 @@
 #
 #   ts           Prettier check, ESLint, typecheck, compile (Node 24); unit tests (Node 22, 24, 26)
 #   php          composer validate --strict, Pint, PHPStan (PHP 8.4); unit tests (PHP 8.3, 8.4, 8.5)
-#   integration  the vectors and both packages' integration tests against each server in SERVER_IMAGES
+#   integration  the vectors and both packages' integration tests (PHP: Predis and phpredis) against each server in SERVER_IMAGES
 #   package      the packages as consumers get them (the gate's live step)
-#   smoke        consumer scenarios (tests/smoke, docs/smoke-tests.md) against Valkey 9.1 (the gate's smoke)
+#   smoke        consumer scenarios, npm and Composer (tests/smoke, docs/smoke-tests.md) against Valkey 9.1 (the gate's smoke)
 #   format       rewrites the files Prettier would change (build helper, not in the gate)
 #   locks        regenerates package-lock.json and composer.lock (build helper, not in the gate)
 set -euo pipefail
@@ -134,9 +134,9 @@ cmd_integration() {
     echo "=== TypeScript vectors and integration (Node $MAIN_NODE, ioredis) against $image"
     run_named "$prefix-itest-ts-$n" --network "container:$server" -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
       "$node_image" sh -c 'npm run test:feature && npm run test:integration'
-    echo "=== PHP integration (PHP $MAIN_PHP, Predis) against $image"
+    echo "=== PHP vectors and integration (PHP $MAIN_PHP, Predis and phpredis) against $image"
     run_named "$prefix-itest-php-$n" --network "container:$server" -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
-      "$php_image" vendor/bin/phpunit --testsuite integration
+      "$php_image" sh -c 'vendor/bin/phpunit --testsuite feature && vendor/bin/phpunit --testsuite integration'
     docker rm -fv "$server" > /dev/null
   done
 }
@@ -149,13 +149,17 @@ cmd_package() {
 }
 
 cmd_smoke() {
-  local network="$prefix-net" server="$prefix-server-smoke"
+  local network="$prefix-net" server="$prefix-server-smoke" node_image
   build_image node "$MAIN_NODE"
+  node_image="$IMAGE_TAG"
+  build_image php "$MAIN_PHP"
   networks="$networks $network"
   docker network create "$network" > /dev/null
   start_server "$VALKEY_IMAGE" "$server" "$network"
   run_named "$prefix-smoke" --network "container:$server" -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
-    "$IMAGE_TAG" bash tests/smoke/run-consumer.sh
+    "$node_image" bash tests/smoke/run-consumer.sh
+  run_named "$prefix-smoke-php" --network "container:$server" -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
+    "$IMAGE_TAG" bash tests/smoke/php/run-consumer.sh
 }
 
 cmd_format() {

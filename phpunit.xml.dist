@@ -11,6 +11,7 @@
          beStrictAboutOutputDuringTests="true">
     <testsuites>
         <testsuite name="unit"><directory>php/tests/Unit</directory></testsuite>
+        <testsuite name="feature"><directory>php/tests/Feature</directory></testsuite>
         <testsuite name="integration"><directory>php/tests/Integration</directory></testsuite>
     </testsuites>
     <source><include><directory>php/src</directory></include></source>

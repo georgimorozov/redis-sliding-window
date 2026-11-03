@@ -10,9 +10,14 @@ COPY . .
 
 FROM php:${PHP_VERSION}-cli-trixie AS php-test
 ENV COMPOSER_ALLOW_SUPERUSER=1
+# phpredis (pecl "redis"), the version docs/design.md "Supported versions" names; PHPIZE_DEPS builds it.
+ARG PHPREDIS_VERSION=6.3.0
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends git unzip \
-  && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends git unzip $PHPIZE_DEPS \
+  && printf '\n\n\n\n\n\n' | pecl install "redis-${PHPREDIS_VERSION}" \
+  && docker-php-ext-enable redis \
+  && php -r 'exit(phpversion("redis") === getenv("PHPREDIS_VERSION") ? 0 : 1);' \
+  && rm -rf /var/lib/apt/lists/* /tmp/pear
 COPY --from=composer/composer:2-bin /composer /usr/bin/composer
 WORKDIR /app
 COPY composer.json composer.lock ./

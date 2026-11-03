@@ -3,4 +3,5 @@ parameters:
     phpVersion: 80300
     paths:
         - php/src
+        - php/config
         - php/tests
