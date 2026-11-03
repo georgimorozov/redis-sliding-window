@@ -1,0 +1,17 @@
+{
+  "id": "lowered-limit-retry",
+  "description": "Five entries recorded under an earlier, higher limit (50, 40, 30, 20 and 10 seconds old) against a limit of 3 per minute: denied, and the next request can succeed when the 30-second-old entry ages out (30000 ms), not the oldest (10000 ms).",
+  "config": { "limit": 3, "windowMs": 60000 },
+  "steps": [
+    { "op": "seed", "agesMs": [50000, 40000, 30000, 20000, 10000] },
+    {
+      "op": "hit",
+      "expect": {
+        "allowed": false,
+        "remaining": 0,
+        "retryAfterMs": { "min": 29800, "max": 30000 },
+        "resetAfterMs": { "min": 49800, "max": 50000 }
+      }
+    }
+  ]
+}

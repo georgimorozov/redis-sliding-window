@@ -1,0 +1,13 @@
+{
+  "queue_prefix": "RSW",
+  "tests": [
+    "for f in scripts/*.sh tests/scripts/*.sh; do bash -n \"$f\" || exit 1; done",
+    "bash scripts/check-no-attribution.sh",
+    "bash tests/scripts/check-no-attribution.test.sh",
+    "bash scripts/docker-test.sh ts",
+    "bash scripts/docker-test.sh php",
+    "bash scripts/docker-test.sh integration"
+  ],
+  "live": ["bash scripts/docker-test.sh package"],
+  "remote_docker": true
+}

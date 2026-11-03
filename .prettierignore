@@ -1,0 +1,9 @@
+.claude
+dist
+coverage
+vendor
+node_modules
+package-lock.json
+composer.lock
+composer.json
+*.md

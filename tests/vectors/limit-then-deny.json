@@ -1,0 +1,28 @@
+{
+  "id": "limit-then-deny",
+  "description": "With a limit of 3 per minute, three hits are allowed with falling remaining counts, and the fourth is denied until the first entry ages out.",
+  "config": { "limit": 3, "windowMs": 60000 },
+  "steps": [
+    {
+      "op": "hit",
+      "expect": { "allowed": true, "remaining": 2, "retryAfterMs": 0, "resetAfterMs": 60000 }
+    },
+    {
+      "op": "hit",
+      "expect": { "allowed": true, "remaining": 1, "retryAfterMs": 0, "resetAfterMs": 60000 }
+    },
+    {
+      "op": "hit",
+      "expect": { "allowed": true, "remaining": 0, "retryAfterMs": 0, "resetAfterMs": 60000 }
+    },
+    {
+      "op": "hit",
+      "expect": {
+        "allowed": false,
+        "remaining": 0,
+        "retryAfterMs": { "min": 59000, "max": 60000 },
+        "resetAfterMs": { "min": 59000, "max": 60000 }
+      }
+    }
+  ]
+}

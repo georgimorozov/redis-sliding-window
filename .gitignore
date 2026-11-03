@@ -3,6 +3,7 @@ vendor/
 dist/
 coverage/
 .phpunit.cache/
-.env
+.env*
 .DS_Store
 test-results/
+*.rsw-tmp
