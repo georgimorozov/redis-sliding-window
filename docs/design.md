@@ -217,12 +217,18 @@ final class SlidingWindowLimiter
 ### Laravel
 
 `RedisSlidingWindowServiceProvider` (auto-discovered through `extra.laravel.providers`) merges
-`config/redis-sliding-window.php` (`connection`, `prefix`, `limiters`: name => `limit`, `window_ms`, `fail_mode`),
+`config/redis-sliding-window.php` (`connection`, `prefix`, `warning_store`, `limiters`: name => `limit`, `window_ms`, `fail_mode`),
 binds `Laravel\Limiters` as a singleton (one limiter per name, on the connection's `client()`) and registers
 the route middleware alias `sliding-window`. `sliding-window:<name>` hits once per request with the identifier
 `user:<auth id>` when signed in, else `ip:<client IP>`, and throws `ThrottleRequestsException` with `Retry-After`
 (Laravel renders a 429) when denied. A degraded result is logged as a warning (`limiter`, `reason`,
-`fail_mode`; never the identifier). Validation errors from the config throw. Nothing calls `load()`: the
+`fail_mode`; never the identifier), at most once a minute per limiter: inside the `onError` callback (still called
+once per degraded result), the first caller takes the marker `rsw-warned:` + sha1(prefix, NUL, name) with an atomic
+`add()` (TTL 60 s) on the `warning_store` cache store (default `file`, resolved only on the degraded path); when
+`add()` is false a follow-up `has()` that finds no marker logs anyway, and a store error logs anyway (visibility
+over strictness; the store never throws to the caller). A logger error reaches the core's callback boundary. Best
+effort: scope is the store's directory or host, and the marker is taken before logging, so a crash between the two
+loses that minute's warning. `warning_store => null` logs every degraded result. Validation errors from the config throw. Nothing calls `load()`: the
 `NOSCRIPT` fallback loads the script on first use.
 
 ## Failure policy
