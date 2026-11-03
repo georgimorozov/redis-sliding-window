@@ -47,7 +47,7 @@ the request in integer microseconds. One script run per call does this atomicall
 2. Remove members scored at or below `now - windowMs * 1000`.
 3. If the nonce is still a member, the call is a resend of an allowed call whose entry remains: allowed, nothing
    changes.
-4. Count the members. Below `limit`: add the nonce with score `now`, `PEXPIRE` the key `windowMs`, allow.
+4. Count the members. Below `limit`: add the nonce with score `now`, `PEXPIREAT` the key at `ceil(now / 1000) + windowMs` ms, allow.
    Otherwise deny and change nothing.
 
 Guarantees (the tests pin each):
@@ -85,7 +85,7 @@ The packages validate inputs; the script trusts them.
   sorted-set score. Numbers passed to commands are exact integer decimal strings, never Lua's default formatting
   (it rounds). Reading `TIME` before writing is safe because Redis 7.0+ and Valkey replicate a script's effects,
   not the script; hence the Redis 7.2 floor.
-- Data: member = nonce, score = `now`. `PEXPIRE key windowMs` only when an entry is added. The replay check is
+- Data: member = nonce, score = `now`. `PEXPIREAT key ceil(now / 1000) + windowMs` (milliseconds, absolute, rounded up so the key never expires before its newest entry's microsecond window ends) only when an entry is added. The replay check is
   `ZSCORE key nonce` (absent: nil, seen by Lua as `false`).
 - Return: `{allowed, remaining, retryAfterMs, resetAfterMs}`, four integers.
 
@@ -263,7 +263,7 @@ await the client's `ready` event before `load()`).
   `command.args`). Handle them like any other client error.
 - A callback that throws, or (TypeScript) returns a promise that rejects, never changes the result. TypeScript
   attaches a rejection handler without awaiting and emits a process warning, code `RSW_ON_ERROR_FAILED`, as a string
-  with the callback error's message. PHP writes `redis-sliding-window: onError callback failed: <class>: <message>`
+  with the callback error's message (`(unreadable error)` when reading it throws). PHP writes `redis-sliding-window: onError callback failed: <class>: <message>`
   with `error_log()`.
 - Not throttled: during an outage it runs on every call. Throttle inside it (for example one report a minute per
   limiter name).
@@ -315,12 +315,12 @@ once at startup.
 | ioredis | ^6 (peer) | the locked version |
 | Predis | ^3.7 (suggest) | the locked version |
 | phpredis | 6 (suggest) | from RSW-3 |
-| Servers | Redis 7.2+, Valkey 7.2+ | Valkey 9.1 now; RSW-2 sets the matrix |
+| Servers | Redis 7.2+, Valkey 7.2+ | integration and vectors on Valkey 9.1, Valkey 7.2 and Redis 7.2; smoke on Valkey 9.1 |
 
 ## Test plan
 
 Levels: unit (no server: Vitest under `tests/ts/unit`, PHPUnit `unit`); feature (every vector through each
-package's public API on a real server, from RSW-2/RSW-3; the gate's `package` step); integration (real-server
+package's public API on a real server, from RSW-2/RSW-3; run with the integration tests, `tests/ts/feature` for TypeScript); integration (real-server
 behavior beyond the vectors); repository-script tests (`tests/scripts/`); smoke (from RSW-2, the gate's `smoke`
 runs consumer scenario scripts, indexed in `docs/smoke-tests.md`). Integration tests read `REDIS_HOST` and
 `REDIS_PORT` (default 127.0.0.1:6379) and fail without a server.
@@ -381,4 +381,5 @@ Integration (real server):
 - Database: ioredis `db` other than 0 never reaches the server; Predis `database` 99 throws in both modes; no
   limiter call succeeds against another database.
 
-Smoke: RSW-2 adds the gate's `smoke` command and scenario scripts; RSW-3 extends them for PHP.
+Smoke: RSW-2 adds the gate's `smoke` command (`scripts/docker-test.sh smoke`) and the consumer scenario scripts in
+`tests/smoke/`, run from the packed tarball; RSW-3 extends them for PHP.

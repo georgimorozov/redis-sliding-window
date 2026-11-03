@@ -9,9 +9,12 @@ const parsed = JSON.parse(await text(process.stdin));
 // npm prints an array of tarball summaries, or an object keyed by package name; accept both.
 const tarballs = Array.isArray(parsed) ? parsed : Object.values(parsed);
 const paths = tarballs.flatMap((tarball) => tarball.files.map((file) => file.path));
-const missing = ['package.json', 'dist/index.js', 'dist/index.d.ts'].filter(
-  (path) => !paths.includes(path),
-);
+const missing = [
+  'package.json',
+  'dist/index.js',
+  'dist/index.d.ts',
+  'lua/sliding-window.lua',
+].filter((path) => !paths.includes(path));
 const forbidden = paths.filter((path) =>
   /^(src|tests|php|scripts|docker|node_modules)\//.test(path),
 );

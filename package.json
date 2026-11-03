@@ -41,7 +41,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run tests/ts/unit",
     "test:unit": "vitest run tests/ts/unit",
-    "test:integration": "vitest run tests/ts/integration"
+    "test:integration": "vitest run tests/ts/integration --no-file-parallelism",
+    "test:feature": "vitest run tests/ts/feature"
   },
   "peerDependencies": {
     "ioredis": "^6.0.0"

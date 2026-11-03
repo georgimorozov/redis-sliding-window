@@ -9,5 +9,6 @@
     "bash scripts/docker-test.sh integration"
   ],
   "live": ["bash scripts/docker-test.sh package"],
-  "remote_docker": true
+  "remote_docker": true,
+  "smoke": "bash scripts/docker-test.sh smoke"
 }
