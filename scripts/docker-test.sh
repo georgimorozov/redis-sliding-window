@@ -8,8 +8,9 @@
 #
 #   ts           Prettier check, ESLint, typecheck, compile (Node 24); unit tests (Node 22, 24, 26)
 #   php          composer validate --strict, Pint, PHPStan (PHP 8.4); unit tests (PHP 8.3, 8.4, 8.5)
-#   integration  both packages' integration tests against Valkey 9.1
+#   integration  the vectors and both packages' integration tests against each server in SERVER_IMAGES
 #   package      the packages as consumers get them (the gate's live step)
+#   smoke        consumer scenarios (tests/smoke, docs/smoke-tests.md) against Valkey 9.1 (the gate's smoke)
 #   format       rewrites the files Prettier would change (build helper, not in the gate)
 #   locks        regenerates package-lock.json and composer.lock (build helper, not in the gate)
 set -euo pipefail
@@ -21,6 +22,8 @@ PHP_VERSIONS="8.3 8.4 8.5"
 MAIN_NODE=24
 MAIN_PHP=8.4
 VALKEY_IMAGE=valkey/valkey:9.1
+# The supported floor (Redis 7.2+, Valkey 7.2+) and the current Valkey (docs/design.md, "Supported versions").
+SERVER_IMAGES="valkey/valkey:9.1 valkey/valkey:7.2 redis:7.2"
 
 run_id="${GATE_RUN_ID:-local_$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')}"
 prefix="rsw-$(printf '%s' "$run_id" | tr -c 'a-z0-9_' '_')"
@@ -68,9 +71,17 @@ run_in() { # <image> <command...>: one command in a fresh container of a test im
   run_named "$prefix-run-$count" "$image" "$@"
 }
 
-wait_for_ping() { # <container>: waits up to 30 s for the Valkey server in it to answer PING
+start_server() { # <image> <container> <network>: starts a Redis or Valkey server without persistence
+  local binary=valkey-server
+  case "$1" in redis:*) binary=redis-server ;; esac
+  containers="$containers $2"
+  docker run -d --name "$2" --network "$3" "$1" "$binary" --save '' --appendonly no > /dev/null
+  wait_for_ping "$2"
+}
+
+wait_for_ping() { # <container>: waits up to 30 s for the server in it to answer PING
   local attempt=0
-  until [ "$(docker exec "$1" valkey-cli ping 2> /dev/null || true)" = PONG ]; do
+  until [ "$(docker exec "$1" sh -c 'valkey-cli ping 2> /dev/null || redis-cli ping' 2> /dev/null || true)" = PONG ]; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 60 ]; then
       echo "docker-test: $1 did not answer PING within 30 s" >&2
@@ -109,22 +120,25 @@ cmd_php() {
 }
 
 cmd_integration() {
-  local network="$prefix-net" server="$prefix-valkey" node_image php_image
+  local network="$prefix-net" node_image php_image image server n=0
   build_image node "$MAIN_NODE"
   node_image="$IMAGE_TAG"
   build_image php "$MAIN_PHP"
   php_image="$IMAGE_TAG"
   networks="$networks $network"
   docker network create "$network" > /dev/null
-  containers="$containers $server"
-  docker run -d --name "$server" --network "$network" "$VALKEY_IMAGE" valkey-server --save '' --appendonly no > /dev/null
-  wait_for_ping "$server"
-  echo "=== TypeScript integration (Node $MAIN_NODE, ioredis) against $VALKEY_IMAGE"
-  run_named "$prefix-itest-ts" --network "container:$server" -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
-    "$node_image" npm run test:integration
-  echo "=== PHP integration (PHP $MAIN_PHP, Predis) against $VALKEY_IMAGE"
-  run_named "$prefix-itest-php" --network "container:$server" -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
-    "$php_image" vendor/bin/phpunit --testsuite integration
+  for image in $SERVER_IMAGES; do
+    n=$((n + 1))
+    server="$prefix-server-$n"
+    start_server "$image" "$server" "$network"
+    echo "=== TypeScript vectors and integration (Node $MAIN_NODE, ioredis) against $image"
+    run_named "$prefix-itest-ts-$n" --network "container:$server" -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
+      "$node_image" sh -c 'npm run test:feature && npm run test:integration'
+    echo "=== PHP integration (PHP $MAIN_PHP, Predis) against $image"
+    run_named "$prefix-itest-php-$n" --network "container:$server" -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
+      "$php_image" vendor/bin/phpunit --testsuite integration
+    docker rm -fv "$server" > /dev/null
+  done
 }
 
 cmd_package() {
@@ -132,6 +146,16 @@ cmd_package() {
   run_in "$IMAGE_TAG" sh -c 'npm run compile && npm pack --dry-run --json | node scripts/check-pack.mjs'
   build_image php "$MAIN_PHP"
   run_in "$IMAGE_TAG" sh -c 'composer dump-autoload --no-dev --classmap-authoritative && php scripts/check-autoload.php'
+}
+
+cmd_smoke() {
+  local network="$prefix-net" server="$prefix-server-smoke"
+  build_image node "$MAIN_NODE"
+  networks="$networks $network"
+  docker network create "$network" > /dev/null
+  start_server "$VALKEY_IMAGE" "$server" "$network"
+  run_named "$prefix-smoke" --network "container:$server" -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
+    "$IMAGE_TAG" bash tests/smoke/run-consumer.sh
 }
 
 cmd_format() {
@@ -176,10 +200,11 @@ case "${1:-}" in
   php) cmd_php ;;
   integration) cmd_integration ;;
   package) cmd_package ;;
+  smoke) cmd_smoke ;;
   format) cmd_format ;;
   locks) cmd_locks ;;
   *)
-    echo "usage: scripts/docker-test.sh ts|php|integration|package|format|locks" >&2
+    echo "usage: scripts/docker-test.sh ts|php|integration|package|smoke|format|locks" >&2
     exit 1
     ;;
 esac

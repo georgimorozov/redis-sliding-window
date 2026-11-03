@@ -315,12 +315,12 @@ once at startup.
 | ioredis | ^6 (peer) | the locked version |
 | Predis | ^3.7 (suggest) | the locked version |
 | phpredis | 6 (suggest) | from RSW-3 |
-| Servers | Redis 7.2+, Valkey 7.2+ | Valkey 9.1 now; RSW-2 sets the matrix |
+| Servers | Redis 7.2+, Valkey 7.2+ | integration and vectors on Valkey 9.1, Valkey 7.2 and Redis 7.2; smoke on Valkey 9.1 |
 
 ## Test plan
 
 Levels: unit (no server: Vitest under `tests/ts/unit`, PHPUnit `unit`); feature (every vector through each
-package's public API on a real server, from RSW-2/RSW-3; the gate's `package` step); integration (real-server
+package's public API on a real server, from RSW-2/RSW-3; run with the integration tests, `tests/ts/feature` for TypeScript); integration (real-server
 behavior beyond the vectors); repository-script tests (`tests/scripts/`); smoke (from RSW-2, the gate's `smoke`
 runs consumer scenario scripts, indexed in `docs/smoke-tests.md`). Integration tests read `REDIS_HOST` and
 `REDIS_PORT` (default 127.0.0.1:6379) and fail without a server.
@@ -381,4 +381,5 @@ Integration (real server):
 - Database: ioredis `db` other than 0 never reaches the server; Predis `database` 99 throws in both modes; no
   limiter call succeeds against another database.
 
-Smoke: RSW-2 adds the gate's `smoke` command and scenario scripts; RSW-3 extends them for PHP.
+Smoke: RSW-2 adds the gate's `smoke` command (`scripts/docker-test.sh smoke`) and the consumer scenario scripts in
+`tests/smoke/`, run from the packed tarball; RSW-3 extends them for PHP.
