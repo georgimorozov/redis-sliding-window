@@ -24,7 +24,7 @@ request can succeed.
 
 ## Install
 
-Releases are git tags; pin one. Nothing is published to the npm or Packagist registries yet.
+Releases are git tags; pin one. Nothing is published to the npm or Packagist registries; installs come from git tags only.
 
 TypeScript (Node.js 22+, ESM, ioredis):
 
